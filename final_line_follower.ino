@@ -323,7 +323,7 @@ void CalcError() {
 void PID_Turn() {
   // Read values are scaled PID constants from potentiometers
   kP = (float)kPRead; 
-  kI = 0; // Hardcoded integral value
+  kI = 0.0; // Hardcoded integral value
   kD = (float)kDRead;
 
   // 1. Calculate raw discrete derivative
@@ -335,8 +335,12 @@ void PID_Turn() {
   // 3. Store the filtered value for the next loop iteration
   previous_derivative = filtered_derivative;
 
-  // 4. Calculate Turn output using the filtered derivative
-  Turn = error * kP + sumerror * kI + filtered_derivative * kD;
+  // 4. Calculate Quadratic Proportional Term
+  // This flattens the center response (straights) while maintaining max authority at error = 3.0 (curves)
+  float quadratic_P = kP * error * (abs(error) / 3.0);
+
+  // 5. Calculate Turn output using the quadratic P and filtered D
+  Turn = quadratic_P + (sumerror * kI) + (filtered_derivative * kD);
   
   sumerror = sumerror + error;
 
