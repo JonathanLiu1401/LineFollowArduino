@@ -231,12 +231,15 @@ void ReadPotentiometers() {
  
 // ************************************************************************************************* //
 // Optimized function to start motors with dynamic speed scaling
+// ************************************************************************************************* //
+// Optimized function to start motors with quadratic dynamic speed scaling
 void RunMotors() { 
   // 1. Define the deceleration factor using the mapped potentiometer value
   float K_drop = K_drop_read; 
   
-  // 2. Calculate the speed penalty based on the absolute error
-  int speedPenalty = round(abs(error) * K_drop); 
+  // 2. Calculate the quadratic speed penalty
+  // This maintains high speed on straights while braking heavily for sharp curves
+  int speedPenalty = round(K_drop * error * (error / 3.0)); 
   
   // 3. Calculate dynamic base speed
   int currentBaseSpeed1 = max((M1Sp + SpRead) - speedPenalty, 0); 
