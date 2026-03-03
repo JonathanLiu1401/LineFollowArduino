@@ -35,10 +35,10 @@ const float derivative  = 100;  // Max Kd
 
 // EMA Filter Variables for High-Speed Damping
 float previous_derivative = 0.0; // Stores the previous filtered derivative
-float alpha = 0.6;               // EMA smoothing factor (0.0 to 1.0)
+float alpha = 0.4;               // EMA smoothing factor (0.0 to 1.0)
 
 // Statistical Sampling
-const int numMeas = 50; // 30 samples executes in ~2.8 seconds with optimized logic
+const int numMeas = 40; // 30 samples executes in ~2.8 seconds with optimized logic
 
 // Initialize SPID values to zero
 int SpRead = 0; // Speed Increase 
@@ -96,7 +96,6 @@ void setup() {
 // ************************************************************************************************* //
 // loop - runs/loops forever
 void loop() {
-  ReadPotentiometers(); // Read knobs to adjust tuning dynamically
 
   ReadPhotoResistors(); // Read photoresistors and map to 0-100 based on calibration
 
@@ -154,25 +153,6 @@ void EmergencyStop() {
   Motor2->setSpeed(0);
 }
 
-// ************************************************************************************************* //
-// function to quickly blink an LED
-void fastBlink() {
-  digitalWrite(led_Pin, HIGH); 
-  delay(100); 
-
-  digitalWrite(led_Pin, LOW); 
-  delay(100); 
-} 
-
-// ************************************************************************************************* //
-// function to slowly blink an LED
-void slowBlink() {
-  digitalWrite(led_Pin, HIGH); 
-  delay(100); 
-
-  digitalWrite(led_Pin, LOW); 
-  delay(900); 
-} 
 
 // ************************************************************************************************* //
 // Optimized function to calibrate
@@ -333,6 +313,8 @@ void PID_Turn() {
   // 4. Calculate Quadratic Proportional Term
   // This flattens the center response (straights) while maintaining max authority at error = 3.0 (curves)
   float quadratic_P = kP * error * (abs(error) / 3.0);
+
+  // float quadratic_P = kP * error;
 
   // 5. Calculate Turn output using the quadratic P and filtered D
   Turn = quadratic_P + (sumerror * kI) + (filtered_derivative * kD);
