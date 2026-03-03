@@ -1,5 +1,5 @@
 /* ************************************************************************************************* */
-// * ECE 201: Line Following Robot with PID + Dynamic Throttle & Safety Logic * //
+// * ECE 201: Line Following Robot with PID (Speed Penalty Removed) * //
 /* ************************************************************************************************* */
 
 // ************************************************************************************************* //
@@ -13,7 +13,7 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Motors can be switched here (1) <--> (2)
 Adafruit_DCMotor *Motor1 = AFMS.getMotor(1); // left motor
 Adafruit_DCMotor *Motor2 = AFMS.getMotor(2); // right motor
-  
+
 // Set Initial Speed of Motors (CAN BE EDITED BY USER)
 // Default speed set to 60 as recommended
 const int M1Sp = 60; 
@@ -23,7 +23,7 @@ const int M2Sp = 60;
 // Assigned to Analog pins A0-A3
 const int S_pin = A0; // speed control
 const int P_pin = A1; // proportional control
-const int I_pin = A2; // dynamic deceleration (K_drop) control
+const int I_pin = A2; // dynamic deceleration (K_drop) control - NOW UNUSED
 const int D_pin = A3; // derivative control
 
 // User set SPID values
@@ -35,7 +35,7 @@ const float derivative  = 100;  // Max Kd
 
 // EMA Filter Variables for High-Speed Damping
 float previous_derivative = 0.0; // Stores the previous filtered derivative
-float alpha = 0.3;               // EMA smoothing factor (0.0 to 1.0)
+float alpha = 0.6;               // EMA smoothing factor (0.0 to 1.0)
 
 // Statistical Sampling
 const int numMeas = 50; // 30 samples executes in ~2.8 seconds with optimized logic
@@ -45,7 +45,7 @@ int SpRead = 0; // Speed Increase
 int kPRead = 0; // Proportional gain
 float K_drop_read = 0; // Dynamic deceleration factor
 int kDRead = 0; // Derivative gain
-  
+
 // Variables for Light Sensors
 // LDR_Pin holds 7 values of the LDR pin connection to the Arduino
 int LDR_Pin[7] = {A8, A9, A10, A11, A12, A13, A14}; 
@@ -64,10 +64,10 @@ int MxIndex; // index of max read value
 float AveRead; // average read value
 int CriteriaForMax; // value to determine whether a read value is a max
 float WeightedAve; // weighted average
-  
+
 // Error calculation variables
 int im0, im1, im2; 
-  
+
 // Motor control variables
 int M1SpeedtoMotor, M2SpeedtoMotor; // actual speeds motor will be rotating at
 int Turn; // which direction and how sharply should the cart turn
@@ -76,7 +76,7 @@ float error; // current error
 int lasterror = 0; // previous error
 int sumerror = 0; // sum of total errors
 float kP, kI, kD; // final values of P, I, and D used in control
- 
+
 // ************************************************************************************************* //
 // setup - runs once
 void setup() {
@@ -84,24 +84,22 @@ void setup() {
   AFMS.begin(); // initialize the motor
 
   pinMode(led_Pin, OUTPUT); // set the led_pin to be an output
-  
+
   Calibrate(); // Calibrate black and white sensing
-  
+
   ReadPotentiometers(); // Read potentiometer values
-  
-  delay(2000); // Delay to ensure cart is properly placed before moving
-  
+
   RunMotors(); // Starts motors straight forward
- 
+
 } // end setup()
 
 // ************************************************************************************************* //
 // loop - runs/loops forever
 void loop() {
   ReadPotentiometers(); // Read knobs to adjust tuning dynamically
-  
+
   ReadPhotoResistors(); // Read photoresistors and map to 0-100 based on calibration
-  
+
   // *** SAFETY CHECK ***
   // If CheckSafety returns false, danger is detected.
   // We stop the motors and skip the PID calculation.
@@ -109,14 +107,14 @@ void loop() {
     EmergencyStop();
     return; // Restart the loop immediately
   }
-  
+
   CalcError();
-  
+
   PID_Turn(); // PID Control and Output to motors to turn
   RunMotors(); 
-  
+
   // Print(); // Uncomment this line to tune on the track, re-comment for competition runs
- 
+
 } // end loop()
 
 // ************************************************************************************************* //
@@ -188,18 +186,18 @@ void Calibrate() {
     } 
   } 
   digitalWrite(led_Pin, LOW); // Turn LED OFF to indicate reading is done
-    
+
   // 2. Find average of each LDR's white read values
   for (int cm = 0; cm < 7; cm++) { 
     Mn[cm] = round(LDRf[cm] / (float)numMeas); 
     LDRf[cm] = 0.; 
   }
- 
+
   // 3. Wait to move from White to Black Surface
   // slowBlink(); // 1000 ms delay
   // slowBlink(); // 1000 ms delay
   delay(1000);
- 
+
   // 4. Black Calibration (Fast, Continuous Reading)
   digitalWrite(led_Pin, HIGH); // Turn LED ON to indicate active reading
   for (int calii = 0; calii < numMeas; calii++) { 
@@ -209,7 +207,7 @@ void Calibrate() {
     } 
   }  
   digitalWrite(led_Pin, LOW); // Turn LED OFF
-  
+
   // 5. Find average of each LDR's black read values
   for (int cm = 0; cm < 7; cm++) { 
     Mx[cm] = round(LDRf[cm] / (float)numMeas); 
@@ -222,49 +220,43 @@ void Calibrate() {
 void ReadPotentiometers() {
   SpRead = map(analogRead(S_pin), 0, 1023, 0, speed);
   kPRead = map(analogRead(P_pin), 0, 1023, 0, proportion);
-  
+
   // Reassign I_pin to control the dynamic deceleration factor
   K_drop_read = map(analogRead(I_pin), 0, 1023, 0, max_k_drop);
-  
+
   kDRead = map(analogRead(D_pin), 0, 1023, 0, derivative);
 } // end ReadPotentiometers()
- 
+
 // ************************************************************************************************* //
-// Optimized function to start motors with dynamic speed scaling
+// Optimized function to start motors WITHOUT dynamic speed scaling
 // ************************************************************************************************* //
-// Optimized function to start motors with quadratic dynamic speed scaling
 void RunMotors() { 
-  // 1. Define the deceleration factor using the mapped potentiometer value
-  float K_drop = K_drop_read; 
-  
-  // 2. Calculate the quadratic speed penalty
-  // This maintains high speed on straights while braking heavily for sharp curves
-  int speedPenalty = round(K_drop * error * (error / 3.0)); 
-  
-  // 3. Calculate dynamic base speed
-  int currentBaseSpeed1 = max((M1Sp + SpRead) - speedPenalty, 0); 
-  int currentBaseSpeed2 = max((M2Sp + SpRead) - speedPenalty, 0); 
-  
-  // 4. Apply the PID turn calculations to the dynamic base speed
+  // 1. Calculate base speed (Constant + Potentiometer boost)
+  // SPEED PENALTY LOGIC REMOVED
+  int currentBaseSpeed1 = M1Sp + SpRead; 
+  int currentBaseSpeed2 = M2Sp + SpRead; 
+
+  // 2. Apply the PID turn calculations to the base speed
+  // One motor gets faster, one gets slower (Differential Drive)
   M1SpeedtoMotor = currentBaseSpeed1 + M1P; 
   M2SpeedtoMotor = currentBaseSpeed2 + M2P; 
-  
-  // 5. Constrain absolute bounds to prevent 8-bit variable overflow
+
+  // 3. Constrain absolute bounds to prevent 8-bit variable overflow
   M1SpeedtoMotor = constrain(M1SpeedtoMotor, -255, 255);
   M2SpeedtoMotor = constrain(M2SpeedtoMotor, -255, 255);
-  
-  // 6. Send absolute speeds to the Adafruit motor shield
+
+  // 4. Send absolute speeds to the Adafruit motor shield
   Motor1->setSpeed(abs(M1SpeedtoMotor)); 
   Motor2->setSpeed(abs(M2SpeedtoMotor));
-  
-  // 7. Motor 1 direction control
+
+  // 5. Motor 1 direction control
   if (M1SpeedtoMotor > 0) {
     Motor1->run(FORWARD);
   } else { 
     Motor1->run(BACKWARD);
   }
 
-  // 8. Motor 2 direction control
+  // 6. Motor 2 direction control
   if (M2SpeedtoMotor > 0) {
     Motor2->run(FORWARD);
   } else {  
@@ -334,7 +326,7 @@ void PID_Turn() {
 
   // 2. Apply Exponential Moving Average (EMA) Filter
   float filtered_derivative = (alpha * raw_derivative) + ((1.0 - alpha) * previous_derivative);
-  
+
   // 3. Store the filtered value for the next loop iteration
   previous_derivative = filtered_derivative;
 
@@ -344,7 +336,7 @@ void PID_Turn() {
 
   // 5. Calculate Turn output using the quadratic P and filtered D
   Turn = quadratic_P + (sumerror * kI) + (filtered_derivative * kD);
-  
+
   sumerror = sumerror + error;
 
   // prevents integrator wind-up
@@ -353,9 +345,9 @@ void PID_Turn() {
   } else if (sumerror < -5) {
     sumerror = -5;
   }
-  
+
   lasterror = error;
-  
+
   // One motor becomes slower and the other faster, to "turn"
   if (Turn < 0) { 
     M1P = Turn; 
@@ -376,16 +368,16 @@ void Print() {
   Serial.print(error); Serial.print(" ");
   Serial.print(sumerror); Serial.print(" ");
   Serial.print(lasterror); Serial.print(" ");
-  
+
   Serial.print("   |   "); 
-  
+
   Serial.print(SpRead); Serial.print(" "); 
   Serial.print(kP); Serial.print(" "); 
   Serial.print(K_drop_read); Serial.print(" "); // Prints your dynamic deceleration factor
   Serial.print(kD); Serial.print(" ");
 
   Serial.print("   |   "); 
-  
+
   Serial.print(LDR[0]); Serial.print(" "); 
   Serial.print(LDR[1]); Serial.print(" ");
   Serial.print(LDR[2]); Serial.print(" ");
@@ -395,15 +387,15 @@ void Print() {
   Serial.print(LDR[6]); Serial.print(" "); 
 
   Serial.print("   |   "); 
-  
+
   Serial.print(MxRead); Serial.print(" "); 
   Serial.print(MxIndex);Serial.print(" "); 
   Serial.print(error); Serial.print(" "); 
 
   Serial.print("   |   "); 
-  
+
   Serial.print(M1SpeedtoMotor); Serial.print(" "); 
   Serial.println(M2SpeedtoMotor); 
-  
+
   delay(200); 
 }
