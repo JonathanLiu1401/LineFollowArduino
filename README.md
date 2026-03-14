@@ -4,6 +4,16 @@
 
 This repository contains the complete hardware, mechanical, and software design files for our group's autonomous line-following robot. The system features a custom 3D printed chassis, a bespoke sensor array PCB, and an advanced Arduino-based closed-loop PID control system optimized for aggressive cornering and high-speed straightaways.
 
+## Performance Demonstration
+
+**Record-Breaking 24.5s Run:**
+<video src="20260305_180107.mp4" controls="controls" style="max-width: 100%;">
+  Your browser does not support the video tag.
+</video>
+
+**Robot Overview:**
+![Robot Screenshot](Screenshot%202026-03-12%20131405.png)
+
 ## Repository Structure
 
 Based on the root directory, the project files are organized as follows:
