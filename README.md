@@ -39,6 +39,7 @@ The primary firmware (`final_line_follower.ino`) is built in C++ and implements 
 * **Quadratic Proportional Gain:** The original PID implementation calculated the proportional turning force linearly. The updated control loop scales the proportional error quadratically. By multiplying the error by its absolute ratio over the maximum possible error, the algorithm heavily attenuates steering corrections near the center line. This eliminates high-speed straight-line wobbling while retaining 100 percent control authority at the extreme sensor edges for 90-degree pivots.
 * **Exponential Moving Average (EMA) Derivative Filter:** The original raw discrete derivative calculation was highly susceptible to analog sensor noise, causing jitter. The modified code passes the raw derivative through an EMA low-pass filter with a smoothing factor of 0.4. This prevents erratic micro-corrections and allows the system to support a significantly higher derivative gain (kD = 170) to dampen overshoots during aggressive cornering.
 * **Asynchronous Hardware Polling:** The starter code executed analog-to-digital conversions to read all four potentiometers during every loop iteration. The winning code introduces a modulo counter to restrict potentiometer polling to once every 5000 loop cycles. This dramatically reduces loop execution time, allowing the microcontroller to sample the photoresistors and update the motor PWM outputs at a much higher frequency. 
+* **Rapid Static-State Calibration:** The original calibration sequence utilized synchronous LED blinking (`delay()` based logic) to indicate sampling progress, which artificially bottlenecked the processor and dragged the 40-sample process out to over 20 seconds. We stripped out the blocking blink logic and replaced it with a static LED indicator. This optimization slashed the total calibration time down to just 5 seconds, vastly improving pre-race setup efficiency without sacrificing sensor accuracy.
 * **Hardware Safety Interlocks:** A dedicated safety algorithm continuously monitors the raw sensor array data to detect abnormal environmental states. If the system detects all darkness (indicating the robot has been lifted or driven off a table) or all white (indicating total line loss), it circumvents the PID calculation and instantly cuts power to the drive motors to prevent runaway hardware damage.
 
 ## Setup and Calibration
@@ -47,6 +48,6 @@ The primary firmware (`final_line_follower.ino`) is built in C++ and implements 
 2. **Firmware Upload:** Flash `final_line_follower.ino` to the Arduino Mega.
 3. **Calibration Sequence:**
     * Power the robot on while placing the sensor array strictly over the **white** surface.
-    * Wait for the onboard LED indicator to blink, indicating the white calibration is complete.
-    * Move the robot so the sensor array is directly over the **black** line during the delay window.
+    * Wait for the onboard LED indicator to turn on, signaling active white calibration.
+    * Move the robot so the sensor array is directly over the **black** line during the 1-second delay window.
     * The robot will complete the black calibration, start the internal race clock, and immediately engage the motors.
